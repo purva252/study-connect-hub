@@ -1,0 +1,504 @@
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { 
+  Users, ClipboardList, CheckCircle2, BookOpen, Plus, 
+  Bell, User, LogOut, Copy, QrCode, Send, MoreVertical,
+  Trash2, Edit2, GraduationCap, TrendingUp, Clock
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
+import { Link, useNavigate } from "react-router-dom";
+import { Progress } from "@/components/ui/progress";
+
+interface Student {
+  id: string;
+  name: string;
+  grade: string;
+  email: string;
+  tasksAssigned: number;
+  tasksCompleted: number;
+  connectedAt: string;
+}
+
+interface AssignedTask {
+  id: string;
+  title: string;
+  subject: string;
+  description: string;
+  dueDate: string;
+  priority: "high" | "medium" | "low";
+  assignedTo: string[];
+  completions: { studentId: string; completed: boolean }[];
+  createdAt: string;
+}
+
+const initialStudents: Student[] = [
+  { id: "1", name: "Alice Johnson", grade: "10th", email: "alice@school.edu", tasksAssigned: 5, tasksCompleted: 3, connectedAt: "2024-12-01" },
+  { id: "2", name: "Bob Smith", grade: "10th", email: "bob@school.edu", tasksAssigned: 5, tasksCompleted: 5, connectedAt: "2024-12-05" },
+  { id: "3", name: "Carol Davis", grade: "11th", email: "carol@school.edu", tasksAssigned: 4, tasksCompleted: 2, connectedAt: "2024-12-10" },
+];
+
+const initialTasks: AssignedTask[] = [
+  {
+    id: "1",
+    title: "Physics Lab Report",
+    subject: "Physics",
+    description: "Complete the pendulum experiment report",
+    dueDate: "2025-01-08",
+    priority: "high",
+    assignedTo: ["1", "2", "3"],
+    completions: [
+      { studentId: "1", completed: true },
+      { studentId: "2", completed: true },
+      { studentId: "3", completed: false },
+    ],
+    createdAt: "2024-12-20",
+  },
+  {
+    id: "2",
+    title: "Chapter Review Questions",
+    subject: "Physics",
+    description: "Answer questions from Chapter 10",
+    dueDate: "2025-01-15",
+    priority: "medium",
+    assignedTo: ["1", "2"],
+    completions: [
+      { studentId: "1", completed: false },
+      { studentId: "2", completed: true },
+    ],
+    createdAt: "2024-12-22",
+  },
+];
+
+const TeacherDashboard = () => {
+  const [students] = useState<Student[]>(initialStudents);
+  const [tasks, setTasks] = useState<AssignedTask[]>(initialTasks);
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [newTask, setNewTask] = useState({
+    title: "",
+    subject: "",
+    description: "",
+    dueDate: "",
+    priority: "medium" as "high" | "medium" | "low",
+  });
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const teacherCode = "ABC123";
+
+  const stats = {
+    totalStudents: students.length,
+    totalTasks: tasks.length,
+    pendingTasks: tasks.reduce((acc, t) => acc + t.completions.filter((c) => !c.completed).length, 0),
+    completedThisWeek: tasks.reduce((acc, t) => acc + t.completions.filter((c) => c.completed).length, 0),
+    subjects: 2,
+  };
+
+  const copyCode = () => {
+    navigator.clipboard.writeText(teacherCode);
+    toast({
+      title: "Code copied!",
+      description: "Share this code with your students.",
+    });
+  };
+
+  const handleAssignTask = () => {
+    if (!newTask.title || !newTask.subject || selectedStudents.length === 0) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all required fields and select at least one student.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const task: AssignedTask = {
+      id: Date.now().toString(),
+      ...newTask,
+      assignedTo: selectedStudents,
+      completions: selectedStudents.map((id) => ({ studentId: id, completed: false })),
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+
+    setTasks([...tasks, task]);
+    setNewTask({ title: "", subject: "", description: "", dueDate: "", priority: "medium" });
+    setSelectedStudents([]);
+    setIsAssignDialogOpen(false);
+    toast({
+      title: "Task assigned!",
+      description: `Task has been assigned to ${selectedStudents.length} student(s).`,
+    });
+  };
+
+  const deleteTask = (id: string) => {
+    setTasks(tasks.filter((t) => t.id !== id));
+    toast({
+      title: "Task deleted",
+      description: "The task has been removed.",
+    });
+  };
+
+  const toggleStudentSelection = (id: string) => {
+    setSelectedStudents((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+    );
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "high":
+        return "bg-pink/20 text-pink border-pink/30";
+      case "medium":
+        return "bg-warning/20 text-warning border-warning/30";
+      case "low":
+        return "bg-success/20 text-success border-success/30";
+      default:
+        return "bg-muted text-muted-foreground";
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/50">
+        <div className="container mx-auto px-6">
+          <div className="flex items-center justify-between h-16">
+            <Link to="/" className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-accent to-primary flex items-center justify-center">
+                <GraduationCap className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-heading text-lg font-bold">StudySync</span>
+            </Link>
+
+            <div className="flex items-center gap-4">
+              <button className="relative p-2 rounded-lg hover:bg-muted transition-colors">
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-accent rounded-full" />
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-primary flex items-center justify-center">
+                      <User className="w-4 h-4 text-white" />
+                    </div>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem>
+                    <User className="w-4 h-4 mr-2" /> Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/")}>
+                    <LogOut className="w-4 h-4 mr-2" /> Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <main className="pt-24 pb-12 px-6">
+        <div className="container mx-auto">
+          {/* Header */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8"
+          >
+            <h1 className="font-heading text-3xl font-bold mb-2">Welcome, Teacher! 👩‍🏫</h1>
+            <p className="text-muted-foreground">Manage your students and assignments</p>
+          </motion.div>
+
+          {/* Stats Cards */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8"
+          >
+            {[
+              { label: "Students", value: stats.totalStudents, icon: Users, gradient: "from-primary to-pink" },
+              { label: "Tasks Created", value: stats.totalTasks, icon: ClipboardList, gradient: "from-accent to-primary" },
+              { label: "Pending", value: stats.pendingTasks, icon: Clock, gradient: "from-warning to-pink" },
+              { label: "Completed", value: stats.completedThisWeek, icon: CheckCircle2, gradient: "from-success to-accent" },
+              { label: "Subjects", value: stats.subjects, icon: BookOpen, gradient: "from-pink to-primary" },
+            ].map((stat, i) => (
+              <div key={i} className="glass-card p-5 rounded-2xl">
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${stat.gradient} flex items-center justify-center mb-3`}>
+                  <stat.icon className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-2xl font-bold mb-1">{stat.value}</div>
+                <div className="text-sm text-muted-foreground">{stat.label}</div>
+              </div>
+            ))}
+          </motion.div>
+
+          {/* Main Content Grid */}
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Left Column - Students & Tasks */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="lg:col-span-2 space-y-6"
+            >
+              {/* Tabs for Students and Tasks */}
+              <div className="glass-card rounded-2xl overflow-hidden">
+                <Tabs defaultValue="students" className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <TabsList>
+                      <TabsTrigger value="students">My Students</TabsTrigger>
+                      <TabsTrigger value="tasks">Assigned Tasks</TabsTrigger>
+                    </TabsList>
+                    <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="btn-gradient-blue gap-2">
+                          <Send className="w-4 h-4" /> Assign Task
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="glass-card border-border/50 max-w-lg">
+                        <DialogHeader>
+                          <DialogTitle>Assign New Task</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 mt-4">
+                          <div className="space-y-2">
+                            <Label>Task Title</Label>
+                            <Input
+                              placeholder="Enter task title"
+                              value={newTask.title}
+                              onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Subject</Label>
+                            <Input
+                              placeholder="e.g., Physics"
+                              value={newTask.subject}
+                              onChange={(e) => setNewTask({ ...newTask, subject: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Description</Label>
+                            <Textarea
+                              placeholder="Task details..."
+                              value={newTask.description}
+                              onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Due Date</Label>
+                              <Input
+                                type="date"
+                                value={newTask.dueDate}
+                                onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Priority</Label>
+                              <Select
+                                value={newTask.priority}
+                                onValueChange={(v) => setNewTask({ ...newTask, priority: v as "high" | "medium" | "low" })}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="high">High</SelectItem>
+                                  <SelectItem value="medium">Medium</SelectItem>
+                                  <SelectItem value="low">Low</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Select Students</Label>
+                            <div className="space-y-2 max-h-40 overflow-y-auto">
+                              {students.map((student) => (
+                                <label
+                                  key={student.id}
+                                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                    selectedStudents.includes(student.id)
+                                      ? "bg-primary/10 border-primary/50"
+                                      : "border-border/50 hover:border-primary/30"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedStudents.includes(student.id)}
+                                    onChange={() => toggleStudentSelection(student.id)}
+                                    className="w-4 h-4 rounded border-muted-foreground text-primary focus:ring-primary"
+                                  />
+                                  <span className="font-medium">{student.name}</span>
+                                  <span className="text-sm text-muted-foreground ml-auto">{student.grade}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                          <Button onClick={handleAssignTask} className="w-full btn-gradient-blue">
+                            Assign Task
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+
+                  <TabsContent value="students" className="space-y-3">
+                    {students.map((student) => (
+                      <motion.div
+                        key={student.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="p-4 rounded-xl bg-card/50 border border-border/50 hover:border-accent/30 transition-all"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-accent to-primary flex items-center justify-center">
+                            <span className="text-lg font-bold text-white">{student.name[0]}</span>
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-medium">{student.name}</h4>
+                            <p className="text-sm text-muted-foreground">{student.grade} • {student.email}</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium">
+                              {student.tasksCompleted}/{student.tasksAssigned} tasks
+                            </div>
+                            <Progress 
+                              value={(student.tasksCompleted / student.tasksAssigned) * 100} 
+                              className="w-24 h-2 mt-1"
+                            />
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </TabsContent>
+
+                  <TabsContent value="tasks" className="space-y-3">
+                    {tasks.map((task) => {
+                      const completedCount = task.completions.filter((c) => c.completed).length;
+                      const totalAssigned = task.assignedTo.length;
+                      return (
+                        <motion.div
+                          key={task.id}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="p-4 rounded-xl bg-card/50 border border-border/50 hover:border-primary/30 transition-all"
+                        >
+                          <div className="flex items-start gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent">
+                                  {task.subject}
+                                </span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full border ${getPriorityColor(task.priority)}`}>
+                                  {task.priority}
+                                </span>
+                              </div>
+                              <h4 className="font-medium">{task.title}</h4>
+                              <p className="text-sm text-muted-foreground line-clamp-1">{task.description}</p>
+                              <div className="flex items-center gap-4 mt-2">
+                                <span className="text-xs text-muted-foreground">Due: {task.dueDate}</span>
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Users className="w-3 h-3" />
+                                  {completedCount}/{totalAssigned} completed
+                                </span>
+                              </div>
+                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="p-1 rounded hover:bg-muted transition-colors">
+                                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem>
+                                  <Edit2 className="w-4 h-4 mr-2" /> Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => deleteTask(task.id)} className="text-destructive">
+                                  <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </TabsContent>
+                </Tabs>
+              </div>
+            </motion.div>
+
+            {/* Right Column - Teacher Code & Quick Actions */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="space-y-6"
+            >
+              {/* Teacher Code Card */}
+              <div className="glass-card p-6 rounded-2xl glow-blue">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
+                    <QrCode className="w-5 h-5 text-accent" />
+                  </div>
+                  <h3 className="font-heading font-semibold">Your Teacher Code</h3>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Share this code with students to connect with them.
+                </p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-4 py-3 rounded-xl bg-muted/50 font-mono text-2xl font-bold text-center tracking-widest">
+                    {teacherCode}
+                  </div>
+                  <Button onClick={copyCode} variant="outline" size="icon" className="h-12 w-12">
+                    <Copy className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Connection Requests */}
+              <div className="glass-card p-6 rounded-2xl">
+                <h3 className="font-heading font-semibold mb-4">Connection Requests</h3>
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm">No pending requests</p>
+                </div>
+              </div>
+
+              {/* Quick Stats */}
+              <div className="glass-card p-6 rounded-2xl">
+                <h3 className="font-heading font-semibold mb-4">Class Performance</h3>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-muted-foreground">Overall Completion</span>
+                      <span className="font-medium">75%</span>
+                    </div>
+                    <Progress value={75} className="h-2" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-muted-foreground">On-time Submissions</span>
+                      <span className="font-medium">88%</span>
+                    </div>
+                    <Progress value={88} className="h-2" />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default TeacherDashboard;

@@ -16,7 +16,7 @@ const Navbar = () => {
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-pink flex items-center justify-center">
               <GraduationCap className="w-5 h-5 text-white" />
             </div>
-            <span className="font-heading text-lg font-bold">StudySync</span>
+            <span className="font-heading text-lg font-bold">Study Connect Hub</span>
           </Link>
 
           {/* Desktop Nav */}

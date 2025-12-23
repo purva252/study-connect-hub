@@ -1,67 +1,81 @@
-# Welcome to your Study Connect Hub project
+# Study Connect Hub
 
-## Project info
+A collaborative study platform for students and teachers.
 
-**URL**: https://your-app-url.example.com
+## Project Structure
 
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in your deployed app.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+study-connect-hub/
+├── frontend/          # Vite + React + Tailwind CSS frontend
+├── backend/           # Express + TypeScript backend API
+└── README.md
 ```
 
-**Edit a file directly in GitHub**
+## Getting Started
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Prerequisites
 
-**Use GitHub Codespaces**
+- Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Installation
 
-## What technologies are used for this project?
+```sh
+# Clone the repository
+git clone <YOUR_GIT_URL>
 
-This project is built with:
+# Navigate to the project directory
+cd study-connect-hub
 
+# Install dependencies for both frontend and backend
+npm run install:all
+```
+
+### Development
+
+```sh
+# Run both frontend and backend concurrently
+npm run dev
+
+# Or run them separately:
+npm run dev:frontend  # Frontend on http://localhost:8080
+npm run dev:backend   # Backend on http://localhost:5000
+```
+
+### Building for Production
+
+```sh
+# Build both frontend and backend
+npm run build
+
+# Or build separately:
+npm run build:frontend
+npm run build:backend
+
+# Start the production backend server
+npm run start:backend
+```
+
+## Technologies
+
+### Frontend
 - Vite
+- React 18
 - TypeScript
-- React
-- shadcn-ui
 - Tailwind CSS
+- shadcn-ui
+- React Router
+- Framer Motion
 
-## How can I deploy this project?
+### Backend
+- Express.js
+- TypeScript
+- CORS
+- dotenv
 
-Deploy this project using your preferred cloud provider or static hosting service (e.g., Vercel, Netlify, GitHub Pages).
+## Deployment
 
-## Can I connect a custom domain to my project?
+Deploy this project using your preferred cloud provider or static hosting service (e.g., Vercel, Netlify, GitHub Pages for frontend, and Heroku, Railway, or Render for backend).
 
-Yes, you can!
+## Custom Domain
 
 To connect a domain, follow your hosting provider's instructions for custom domains.

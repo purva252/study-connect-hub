@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   ClipboardList, CheckCircle2, Clock, TrendingUp, Plus, 
@@ -75,6 +75,37 @@ const StudentDashboard = () => {
   });
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [teacherCode, setTeacherCode] = useState("");
+
+  useEffect(() => {
+    // fetch tasks from backend
+    const load = async () => {
+      try {
+        const token = localStorage.getItem('sc_token');
+        const res = await fetch('/api/tasks', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        // map backend tasks to UI Task shape
+        const mapped = (data.tasks || data).map((t: any) => ({
+          id: t._id,
+          title: t.title,
+          subject: t.subject || '',
+          description: t.description || '',
+          dueDate: t.dueDate ? new Date(t.dueDate).toISOString().slice(0,10) : '',
+          priority: t.priority || 'medium',
+          completed: t.status === 'completed',
+          type: String(t.assignedBy) === String(t.assignedTo) ? 'personal' : (t.assignedBy && t.assignedBy === t.assignedTo ? 'personal' : (t.assignedBy ? 'assigned' : 'personal')),
+          teacherName: t.assignedByName || undefined,
+        }));
+        setTasks(mapped);
+      } catch (err) {
+        // silent
+      }
+    };
+    load();
+  }, []);
 
   const stats = {
     total: tasks.length,
@@ -83,30 +114,47 @@ const StudentDashboard = () => {
     progress: Math.round((tasks.filter((t) => t.completed).length / tasks.length) * 100) || 0,
   };
 
-  const handleAddTask = () => {
+  const handleAddTask = async () => {
     if (!newTask.title || !newTask.subject) {
-      toast({
-        title: "Missing fields",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      });
+      toast({ title: "Missing fields", description: "Please fill in all required fields.", variant: "destructive" });
       return;
     }
-
-    const task: Task = {
-      id: Date.now().toString(),
-      ...newTask,
-      completed: false,
-      type: "personal",
-    };
-
-    setTasks([...tasks, task]);
-    setNewTask({ title: "", subject: "", description: "", dueDate: "", priority: "medium" });
-    setIsAddDialogOpen(false);
-    toast({
-      title: "Task created!",
-      description: "Your new task has been added.",
-    });
+    try {
+      const token = localStorage.getItem('sc_token');
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          title: newTask.title,
+          description: newTask.description,
+          dueDate: newTask.dueDate || undefined,
+          priority: newTask.priority,
+          assignedTo: token ? undefined : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: 'Create failed', description: err.message || 'Failed to create task', variant: 'destructive' });
+        return;
+      }
+      const created = await res.json();
+      const task: Task = {
+        id: created._id || Date.now().toString(),
+        title: created.title,
+        subject: created.subject || newTask.subject,
+        description: created.description || newTask.description,
+        dueDate: created.dueDate ? new Date(created.dueDate).toISOString().slice(0,10) : newTask.dueDate,
+        priority: created.priority || newTask.priority,
+        completed: created.status === 'completed',
+        type: 'personal',
+      };
+      setTasks([...tasks, task]);
+      setNewTask({ title: '', subject: '', description: '', dueDate: '', priority: 'medium' });
+      setIsAddDialogOpen(false);
+      toast({ title: 'Task created!', description: 'Your new task has been added.' });
+    } catch (err: any) {
+      toast({ title: 'Network error', description: err?.message || 'Failed to contact server', variant: 'destructive' });
+    }
   };
 
   const toggleComplete = (id: string) => {
@@ -378,8 +426,25 @@ const StudentDashboard = () => {
                   Enter your teacher's code to receive assignments directly.
                 </p>
                 <div className="flex gap-2">
-                  <Input placeholder="Enter 6-digit code" className="flex-1" maxLength={6} />
-                  <Button className="btn-gradient-blue">Connect</Button>
+                  <Input placeholder="Enter teacher id/code" className="flex-1" maxLength={64} value={teacherCode} onChange={(e) => setTeacherCode(e.target.value)} />
+                  <Button onClick={async () => {
+                    const code = teacherCode?.trim();
+                    if (!code) { toast({ title: 'Enter code', description: 'Please enter teacher code', variant: 'destructive' }); return; }
+                    try {
+                      const token = localStorage.getItem('sc_token');
+                      const res = await fetch('/api/connections/request', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                        body: JSON.stringify({ teacherId: code }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) { toast({ title: 'Request failed', description: data?.message || 'Failed to send request', variant: 'destructive' }); return; }
+                      toast({ title: 'Request sent', description: 'Connection request sent to teacher.' });
+                      setTeacherCode('');
+                    } catch (err: any) {
+                      toast({ title: 'Network error', description: err?.message || 'Failed to contact server', variant: 'destructive' });
+                    }
+                  }} className="btn-gradient-blue">Connect</Button>
                 </div>
               </div>
 

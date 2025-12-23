@@ -44,19 +44,49 @@ const Auth = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulated auth - in production, connect to Supabase
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const payload: any = {
+        email: formData.email,
+        password: formData.password,
+      };
+      if (mode === 'signup') {
+        payload.name = formData.name;
+        payload.role = role;
+      }
 
-    toast({
-      title: mode === "login" ? "Welcome back!" : "Account created!",
-      description: mode === "login" 
-        ? `Logged in as ${role}` 
-        : `Your ${role} account has been created successfully.`,
-    });
+      const url = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
 
-    // Navigate to appropriate dashboard
-    navigate(role === "student" ? "/student" : "/teacher");
-    setIsLoading(false);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        const msg = data?.message || (data?.errors ? data.errors.map((e: any) => e.msg).join(', ') : 'Auth failed');
+        toast({ title: 'Authentication error', description: String(msg) });
+        setIsLoading(false);
+        return;
+      }
+
+      // store token and navigate
+      if (data.token) {
+        localStorage.setItem('sc_token', data.token);
+      }
+
+      toast({
+        title: mode === 'login' ? 'Welcome back!' : 'Account created!',
+        description: mode === 'login' ? `Logged in as ${role}` : `Your ${role} account has been created successfully.`,
+      });
+
+      navigate(role === 'student' ? '/student' : '/teacher');
+    } catch (err: any) {
+      toast({ title: 'Network error', description: err?.message || 'Failed to contact server' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

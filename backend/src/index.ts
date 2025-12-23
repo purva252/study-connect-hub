@@ -1,6 +1,12 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import connectDB from './config/db';
+import authRoutes from './routes/auth';
+import taskRoutes from './routes/tasks';
+import connectionRoutes from './routes/connections';
+import teacherRoutes from './routes/teachers';
+import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
 
@@ -21,9 +27,25 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
-});
+// API routes
+app.use('/api/auth', authRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/connections', connectionRoutes);
+app.use('/api/teachers', teacherRoutes);
+
+// Error handler
+app.use(errorHandler);
+
+// Connect DB then start server
+connectDB()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 Server is running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
 
 export default app;

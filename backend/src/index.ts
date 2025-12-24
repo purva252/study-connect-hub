@@ -7,6 +7,7 @@ import taskRoutes from './routes/tasks';
 import connectionRoutes from './routes/connections';
 import teacherRoutes from './routes/teachers';
 import { errorHandler } from './middleware/errorHandler';
+import zombieRouter from './routes/zombie';
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/connections', connectionRoutes);
 app.use('/api/teachers', teacherRoutes);
+app.use('/api/zombie', zombieRouter);
 
 // Error handler
 app.use(errorHandler);

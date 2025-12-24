@@ -87,6 +87,11 @@ const StudentDashboard = () => {
   const [acceptedConnections, setAcceptedConnections] = useState<any[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
 
+  // Handler for Zombie Game navigation
+  const handleZombieGameClick = () => {
+    navigate('/zombie');
+  };
+
   useEffect(() => {
     // fetch tasks from backend
     const load = async () => {
@@ -582,7 +587,10 @@ const StudentDashboard = () => {
                       <div className="text-xs text-muted-foreground">Create visual guides</div>
                     </div>
                   </button>
-                  <button className="w-full flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-left">
+                  <button 
+                    onClick={handleZombieGameClick}
+                    className="w-full flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-left"
+                  >
                     <div className="w-10 h-10 rounded-xl bg-pink/20 flex items-center justify-center">
                       <Gamepad2 className="w-5 h-5 text-pink" />
                     </div>

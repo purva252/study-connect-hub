@@ -6,6 +6,7 @@ import authRoutes from './routes/auth';
 import taskRoutes from './routes/tasks';
 import connectionRoutes from './routes/connections';
 import teacherRoutes from './routes/teachers';
+import studentRoutes from './routes/students';
 import { errorHandler } from './middleware/errorHandler';
 import zombieRouter from './routes/zombie';
 
@@ -33,6 +34,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/connections', connectionRoutes);
 app.use('/api/teachers', teacherRoutes);
+app.use('/api/students', studentRoutes);
 app.use('/api/zombie', zombieRouter);
 
 // Error handler

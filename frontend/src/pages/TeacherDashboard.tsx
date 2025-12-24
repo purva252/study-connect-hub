@@ -4,7 +4,7 @@ import {
   Users, ClipboardList, CheckCircle2, BookOpen, Plus, 
   Bell, User, LogOut, Copy, QrCode, Send, MoreVertical,
   Trash2, Edit2, GraduationCap, TrendingUp, Clock,
-  AlertCircle, Loader2, Check, X
+  AlertCircle, Loader2, Check, X, Search, UserPlus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -17,7 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
-import { getAcceptedConnections, getPendingConnections, respondToInvite } from "@/services/connectionsApi";
+import { getAcceptedConnections, getPendingConnections, respondToInvite, getAllStudents, sendInvite, type Student as StudentType } from "@/services/connectionsApi";
 import tasksApi from '@/services/tasksApi';
 
 interface Student {
@@ -60,6 +60,14 @@ const TeacherDashboard = () => {
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const [selectedGroupStudents, setSelectedGroupStudents] = useState<any[]>([]);
   const [selectedGroupTitle, setSelectedGroupTitle] = useState("");
+  
+  // Search/Invite students state
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
+  const [allStudents, setAllStudents] = useState<StudentType[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [invitingStudents, setInvitingStudents] = useState<Set<string>>(new Set());
+  
   const [newTask, setNewTask] = useState({
     title: "",
     subject: "",
@@ -71,6 +79,57 @@ const TeacherDashboard = () => {
   const [copiedCode, setCopiedCode] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Search all students
+  const handleSearchStudents = async () => {
+    setLoadingSearch(true);
+    try {
+      const result = await getAllStudents(searchQuery, 1, 50);
+      setAllStudents(result.students);
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to search students',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoadingSearch(false);
+    }
+  };
+
+  // Send invite to student
+  const handleInviteStudent = async (studentId: string) => {
+    setInvitingStudents(prev => new Set(prev).add(studentId));
+    try {
+      await sendInvite(studentId);
+      toast({
+        title: 'Invite sent!',
+        description: 'Connection request sent to student.'
+      });
+      // Reload pending connections
+      const pending = await getPendingConnections();
+      setPendingRequests(pending);
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to send invite',
+        variant: 'destructive'
+      });
+    } finally {
+      setInvitingStudents(prev => {
+        const next = new Set(prev);
+        next.delete(studentId);
+        return next;
+      });
+    }
+  };
+
+  // Open search dialog and load students
+  useEffect(() => {
+    if (searchDialogOpen) {
+      handleSearchStudents();
+    }
+  }, [searchDialogOpen]);
 
   useEffect(() => {
     // Load teacher code
@@ -333,8 +392,107 @@ const TeacherDashboard = () => {
             animate={{ opacity: 1, y: 0 }}
             className="mb-8"
           >
-            <h1 className="font-heading text-3xl font-bold mb-2">Welcome, Teacher! 👩‍🏫</h1>
-            <p className="text-muted-foreground">Manage your students and assignments</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="font-heading text-3xl font-bold mb-2">Welcome, Teacher! 👩‍🏫</h1>
+                <p className="text-muted-foreground">Manage your students and assignments</p>
+              </div>
+              <Dialog open={searchDialogOpen} onOpenChange={setSearchDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="btn-gradient-blue gap-2">
+                    <UserPlus className="w-4 h-4" /> Search & Invite Students
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="glass-card border-border/50 max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Search & Invite Students</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name or email..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSearchStudents()}
+                          className="pl-9"
+                        />
+                      </div>
+                      <Button onClick={handleSearchStudents} disabled={loadingSearch}>
+                        {loadingSearch ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {loadingSearch ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                        </div>
+                      ) : allStudents.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p>No students found</p>
+                          <p className="text-sm mt-2">Try a different search term</p>
+                        </div>
+                      ) : (
+                        allStudents.map((student) => {
+                          const isConnected = connectedStudents.some(c => c.student._id === student._id);
+                          const isPending = pendingRequests.some(p => p.student._id === student._id);
+                          const isInviting = invitingStudents.has(student._id);
+                          
+                          return (
+                            <div
+                              key={student._id}
+                              className="flex items-center justify-between p-4 rounded-xl bg-card/50 border border-border/50"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-accent to-primary flex items-center justify-center">
+                                  <User className="w-5 h-5 text-white" />
+                                </div>
+                                <div>
+                                  <p className="font-medium">{student.name}</p>
+                                  <p className="text-sm text-muted-foreground">{student.email}</p>
+                                </div>
+                              </div>
+                              <div>
+                                {isConnected ? (
+                                  <div className="flex items-center gap-2 text-success">
+                                    <Check className="w-4 h-4" />
+                                    <span className="text-sm font-medium">Connected</span>
+                                  </div>
+                                ) : isPending ? (
+                                  <div className="flex items-center gap-2 text-warning">
+                                    <Clock className="w-4 h-4" />
+                                    <span className="text-sm font-medium">Pending</span>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleInviteStudent(student._id)}
+                                    disabled={isInviting}
+                                    className="btn-gradient-blue"
+                                  >
+                                    {isInviting ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <Send className="w-4 h-4 mr-2" />
+                                        Invite
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           </motion.div>
 
           {/* Stats Cards */}

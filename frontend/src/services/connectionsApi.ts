@@ -16,6 +16,22 @@ export interface Connection {
   createdAt: string;
 }
 
+export interface Student {
+  _id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  hasProfile: boolean;
+  connectedTeachersCount: number;
+}
+
+export interface StudentsResponse {
+  page: number;
+  limit: number;
+  total: number;
+  students: Student[];
+}
+
 export interface RequestConnectionPayload {
   teacherId: string; // Either teacher ID or teacher code
 }
@@ -138,6 +154,29 @@ export const removeConnection = async (connectionId: string): Promise<{ message:
   if (!res.ok) {
     const error = await res.json();
     throw new Error(error.message || 'Failed to remove connection');
+  }
+  return res.json();
+};
+
+// Get list of all students (for teachers to search/invite)
+export const getAllStudents = async (search?: string, page: number = 1, limit: number = 50): Promise<StudentsResponse> => {
+  const token = localStorage.getItem('sc_token');
+  const params = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString()
+  });
+  if (search) {
+    params.append('search', search);
+  }
+  
+  const res = await fetch(`${API_BASE}/students?${params}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.message || 'Failed to fetch students');
   }
   return res.json();
 };

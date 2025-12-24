@@ -17,7 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import MindMap from "@/components/MindMap";
-import { getPendingConnections, getAcceptedConnections, respondToInvite } from "@/services/connectionsApi";
+import { getPendingConnections, getAcceptedConnections } from "@/services/connectionsApi";
 
 interface Task {
   id: string;
@@ -195,31 +195,6 @@ const StudentDashboard = () => {
       title: "Task updated",
       description: "Task status has been changed.",
     });
-  };
-
-  const handleRespondToInvite = async (connectionId: string, action: 'accept' | 'reject') => {
-    try {
-      await respondToInvite(connectionId, action);
-      toast({
-        title: action === 'accept' ? 'Connection accepted!' : 'Connection rejected',
-        description: action === 'accept' ? 'You are now connected with this teacher.' : 'Connection request declined.'
-      });
-      
-      // Reload connections
-      const [pending, accepted] = await Promise.all([
-        getPendingConnections(),
-        getAcceptedConnections()
-      ]);
-      
-      setPendingConnections(pending);
-      setAcceptedConnections(accepted);
-    } catch (err: any) {
-      toast({
-        title: 'Error',
-        description: err.message || 'Failed to respond to invitation',
-        variant: 'destructive'
-      });
-    }
   };
 
   const deleteTask = (id: string) => {
@@ -471,14 +446,14 @@ const StudentDashboard = () => {
               transition={{ delay: 0.3 }}
               className="space-y-6"
             >
-              {/* Pending Connection Requests */}
+              {/* Pending Connection Requests (Sent by Student) */}
               {pendingConnections.length > 0 && (
                 <div className="glass-card p-6 rounded-2xl">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 rounded-xl bg-warning/20 flex items-center justify-center">
-                      <AlertCircle className="w-5 h-5 text-warning" />
+                      <Clock className="w-5 h-5 text-warning" />
                     </div>
-                    <h3 className="font-heading font-semibold">Pending Invites</h3>
+                    <h3 className="font-heading font-semibold">Pending Requests</h3>
                     <span className="ml-auto text-xs bg-warning/20 text-warning px-2 py-1 rounded-full font-semibold">
                       {pendingConnections.length}
                     </span>
@@ -490,25 +465,12 @@ const StudentDashboard = () => {
                         layout
                         className="p-3 bg-card/50 rounded-lg border border-border/50 hover:border-warning/30 transition-colors"
                       >
-                        <p className="font-medium text-sm mb-2">{conn.teacher.name}</p>
-                        <p className="text-xs text-muted-foreground mb-3">{conn.teacher.email}</p>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleRespondToInvite(conn._id, 'accept')}
-                            className="btn-gradient-blue flex-1 h-8"
-                          >
-                            <Check className="w-3 h-3 mr-1" /> Accept
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRespondToInvite(conn._id, 'reject')}
-                            className="flex-1 h-8"
-                          >
-                            <X className="w-3 h-3 mr-1" /> Decline
-                          </Button>
-                        </div>
+                        <p className="font-medium text-sm mb-1">{conn.teacher.name}</p>
+                        <p className="text-xs text-muted-foreground mb-2">{conn.teacher.email}</p>
+                        <p className="text-xs text-warning flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Waiting for teacher to accept...
+                        </p>
                       </motion.div>
                     ))}
                   </div>

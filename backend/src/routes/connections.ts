@@ -29,8 +29,8 @@ router.post(
   }
 );
 
-// User responds to connection (both teachers and students can accept/reject)
-router.patch('/invite/:id/respond', protect, async (req, res) => {
+// Teacher responds to connection request (ONLY TEACHER can accept/reject)
+router.patch('/invite/:id/respond', protect, roleCheck(['teacher']), async (req, res) => {
   const user = (req as any).user;
   const { id } = req.params;
   const { action } = req.body; // 'accept' | 'reject'
@@ -45,12 +45,9 @@ router.patch('/invite/:id/respond', protect, async (req, res) => {
       return res.status(404).json({ message: 'Connection not found' });
     }
     
-    // Check if user is either the teacher or student in this connection
-    const isTeacher = String(conn.teacher) === String(user._id);
-    const isStudent = String(conn.student) === String(user._id);
-    
-    if (!isTeacher && !isStudent) {
-      return res.status(403).json({ message: 'Only involved parties can respond to this connection' });
+    // Only teacher can respond to the connection request
+    if (String(conn.teacher) !== String(user._id)) {
+      return res.status(403).json({ message: 'Only the teacher can respond to this connection request' });
     }
 
     if (conn.status !== 'pending') {

@@ -3,7 +3,8 @@ import { motion } from "framer-motion";
 import { 
   ClipboardList, CheckCircle2, Clock, TrendingUp, Plus, 
   Calendar, Brain, Gamepad2, Link2, Bell, User, LogOut,
-  MoreVertical, Trash2, Edit2, GraduationCap, Users, X
+  MoreVertical, Trash2, Edit2, GraduationCap, Users, X,
+  Check, AlertCircle, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -16,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import MindMap from "@/components/MindMap";
+import { getPendingConnections, getAcceptedConnections, respondToInvite } from "@/services/connectionsApi";
 
 interface Task {
   id: string;
@@ -78,6 +80,11 @@ const StudentDashboard = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [teacherCode, setTeacherCode] = useState("");
+  
+  // Connection state
+  const [pendingConnections, setPendingConnections] = useState<any[]>([]);
+  const [acceptedConnections, setAcceptedConnections] = useState<any[]>([]);
+  const [loadingConnections, setLoadingConnections] = useState(false);
 
   useEffect(() => {
     // fetch tasks from backend
@@ -107,6 +114,29 @@ const StudentDashboard = () => {
       }
     };
     load();
+    
+    // Fetch connections
+    const loadConnections = async () => {
+      setLoadingConnections(true);
+      try {
+        const token = localStorage.getItem('sc_token');
+        if (!token) return;
+        
+        const [pending, accepted] = await Promise.all([
+          getPendingConnections(),
+          getAcceptedConnections()
+        ]);
+        
+        setPendingConnections(pending);
+        setAcceptedConnections(accepted);
+      } catch (err: any) {
+        console.error('Failed to load connections:', err);
+      } finally {
+        setLoadingConnections(false);
+      }
+    };
+    
+    loadConnections();
   }, []);
 
   const stats = {
@@ -165,6 +195,31 @@ const StudentDashboard = () => {
       title: "Task updated",
       description: "Task status has been changed.",
     });
+  };
+
+  const handleRespondToInvite = async (connectionId: string, action: 'accept' | 'reject') => {
+    try {
+      await respondToInvite(connectionId, action);
+      toast({
+        title: action === 'accept' ? 'Connection accepted!' : 'Connection rejected',
+        description: action === 'accept' ? 'You are now connected with this teacher.' : 'Connection request declined.'
+      });
+      
+      // Reload connections
+      const [pending, accepted] = await Promise.all([
+        getPendingConnections(),
+        getAcceptedConnections()
+      ]);
+      
+      setPendingConnections(pending);
+      setAcceptedConnections(accepted);
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to respond to invitation',
+        variant: 'destructive'
+      });
+    }
   };
 
   const deleteTask = (id: string) => {
@@ -416,6 +471,85 @@ const StudentDashboard = () => {
               transition={{ delay: 0.3 }}
               className="space-y-6"
             >
+              {/* Pending Connection Requests */}
+              {pendingConnections.length > 0 && (
+                <div className="glass-card p-6 rounded-2xl">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-warning/20 flex items-center justify-center">
+                      <AlertCircle className="w-5 h-5 text-warning" />
+                    </div>
+                    <h3 className="font-heading font-semibold">Pending Invites</h3>
+                    <span className="ml-auto text-xs bg-warning/20 text-warning px-2 py-1 rounded-full font-semibold">
+                      {pendingConnections.length}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {pendingConnections.map((conn) => (
+                      <motion.div
+                        key={conn._id}
+                        layout
+                        className="p-3 bg-card/50 rounded-lg border border-border/50 hover:border-warning/30 transition-colors"
+                      >
+                        <p className="font-medium text-sm mb-2">{conn.teacher.name}</p>
+                        <p className="text-xs text-muted-foreground mb-3">{conn.teacher.email}</p>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleRespondToInvite(conn._id, 'accept')}
+                            className="btn-gradient-blue flex-1 h-8"
+                          >
+                            <Check className="w-3 h-3 mr-1" /> Accept
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRespondToInvite(conn._id, 'reject')}
+                            className="flex-1 h-8"
+                          >
+                            <X className="w-3 h-3 mr-1" /> Decline
+                          </Button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Connected Teachers */}
+              <div className="glass-card p-6 rounded-2xl">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-success/20 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-success" />
+                  </div>
+                  <h3 className="font-heading font-semibold">Connected Teachers</h3>
+                  {acceptedConnections.length > 0 && (
+                    <span className="ml-auto text-xs bg-success/20 text-success px-2 py-1 rounded-full font-semibold">
+                      {acceptedConnections.length}
+                    </span>
+                  )}
+                </div>
+                {loadingConnections ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : acceptedConnections.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4">No connected teachers yet. Connect with a teacher to get started!</p>
+                ) : (
+                  <div className="space-y-2">
+                    {acceptedConnections.map((conn) => (
+                      <motion.div
+                        key={conn._id}
+                        layout
+                        className="p-3 bg-card/50 rounded-lg border border-border/50 hover:border-success/30 transition-colors"
+                      >
+                        <p className="font-medium text-sm">{conn.teacher.name}</p>
+                        <p className="text-xs text-muted-foreground">{conn.teacher.email}</p>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Connect with Teacher */}
               <div className="glass-card p-6 rounded-2xl">
                 <div className="flex items-center gap-3 mb-4">

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Users, ClipboardList, CheckCircle2, BookOpen, Plus, 
   Bell, User, LogOut, Copy, QrCode, Send, MoreVertical,
-  Trash2, Edit2, GraduationCap, TrendingUp, Clock
+  Trash2, Edit2, GraduationCap, TrendingUp, Clock,
+  AlertCircle, Loader2, Check, X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -16,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
+import { getAcceptedConnections, getPendingConnections, respondToInvite } from "@/services/connectionsApi";
 
 interface Student {
   id: string;
@@ -78,7 +80,9 @@ const initialTasks: AssignedTask[] = [
 ];
 
 const TeacherDashboard = () => {
-  const [students] = useState<Student[]>(initialStudents);
+  const [connectedStudents, setConnectedStudents] = useState<any[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
   const [tasks, setTasks] = useState<AssignedTask[]>(initialTasks);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
@@ -89,25 +93,117 @@ const TeacherDashboard = () => {
     dueDate: "",
     priority: "medium" as "high" | "medium" | "low",
   });
+  const [teacherCode, setTeacherCode] = useState("ABC123");
+  const [copiedCode, setCopiedCode] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const teacherCode = "ABC123";
+  useEffect(() => {
+    // Load teacher code
+    const loadTeacherInfo = async () => {
+      try {
+        const token = localStorage.getItem('sc_token');
+        if (!token) return;
+        
+        const res = await fetch('/api/teachers/profile', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data.code) setTeacherCode(data.code);
+        }
+      } catch (err) {
+        console.error('Failed to load teacher info:', err);
+      }
+    };
+
+    // Load connected students
+    const loadStudents = async () => {
+      setLoadingStudents(true);
+      try {
+        const token = localStorage.getItem('sc_token');
+        if (!token) {
+          console.error('No token found');
+          return;
+        }
+
+        console.log('[TeacherDashboard] Loading connections...');
+        
+        const [accepted, pending] = await Promise.all([
+          getAcceptedConnections(),
+          getPendingConnections()
+        ]);
+        
+        console.log('[TeacherDashboard] Accepted:', accepted);
+        console.log('[TeacherDashboard] Pending:', pending);
+        
+        setConnectedStudents(accepted);
+        setPendingRequests(pending);
+      } catch (err: any) {
+        console.error('Failed to load students:', err);
+        toast({
+          title: 'Error',
+          description: err.message || 'Failed to load connected students',
+          variant: 'destructive'
+        });
+      } finally {
+        setLoadingStudents(false);
+      }
+    };
+
+    loadTeacherInfo();
+    loadStudents();
+  }, [toast]);
 
   const stats = {
-    totalStudents: students.length,
+    totalStudents: connectedStudents.length,
     totalTasks: tasks.length,
     pendingTasks: tasks.reduce((acc, t) => acc + t.completions.filter((c) => !c.completed).length, 0),
     completedThisWeek: tasks.reduce((acc, t) => acc + t.completions.filter((c) => c.completed).length, 0),
-    subjects: 2,
+    subjects: new Set(tasks.map(t => t.subject)).size,
   };
 
-  const copyCode = () => {
-    navigator.clipboard.writeText(teacherCode);
-    toast({
-      title: "Code copied!",
-      description: "Share this code with your students.",
-    });
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(teacherCode);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+      toast({
+        title: "Copied!",
+        description: "Share this code with your students.",
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to copy code",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleRespondToRequest = async (connectionId: string, action: 'accept' | 'reject') => {
+    try {
+      await respondToInvite(connectionId, action);
+      toast({
+        title: action === 'accept' ? 'Accepted!' : 'Rejected',
+        description: action === 'accept' ? 'Student connection accepted.' : 'Connection request declined.'
+      });
+
+      // Reload both pending and accepted
+      const [accepted, pending] = await Promise.all([
+        getAcceptedConnections(),
+        getPendingConnections()
+      ]);
+      setConnectedStudents(accepted);
+      setPendingRequests(pending);
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to respond to request',
+        variant: 'destructive'
+      });
+    }
   };
 
   const handleAssignTask = () => {
@@ -322,25 +418,31 @@ const TeacherDashboard = () => {
                           <div className="space-y-2">
                             <Label>Select Students</Label>
                             <div className="space-y-2 max-h-40 overflow-y-auto">
-                              {students.map((student) => (
-                                <label
-                                  key={student.id}
-                                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                                    selectedStudents.includes(student.id)
-                                      ? "bg-primary/10 border-primary/50"
-                                      : "border-border/50 hover:border-primary/30"
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedStudents.includes(student.id)}
-                                    onChange={() => toggleStudentSelection(student.id)}
-                                    className="w-4 h-4 rounded border-muted-foreground text-primary focus:ring-primary"
-                                  />
-                                  <span className="font-medium">{student.name}</span>
-                                  <span className="text-sm text-muted-foreground ml-auto">{student.grade}</span>
-                                </label>
-                              ))}
+                              {loadingStudents ? (
+                                <p className="text-sm text-muted-foreground">Loading students...</p>
+                              ) : connectedStudents.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No connected students yet</p>
+                              ) : (
+                                connectedStudents.map((connection: any) => (
+                                  <label
+                                    key={connection.student._id}
+                                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                      selectedStudents.includes(connection.student._id)
+                                        ? "bg-primary/10 border-primary/50"
+                                        : "border-border/50 hover:border-primary/30"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedStudents.includes(connection.student._id)}
+                                      onChange={() => toggleStudentSelection(connection.student._id)}
+                                      className="w-4 h-4 rounded border-muted-foreground text-primary focus:ring-primary"
+                                    />
+                                    <span className="font-medium">{connection.student.name}</span>
+                                    <span className="text-sm text-muted-foreground ml-auto">{connection.student.email}</span>
+                                  </label>
+                                ))
+                              )}
                             </div>
                           </div>
                           <Button onClick={handleAssignTask} className="w-full btn-gradient-blue">
@@ -352,33 +454,54 @@ const TeacherDashboard = () => {
                   </div>
 
                   <TabsContent value="students" className="space-y-3">
-                    {students.map((student) => (
-                      <motion.div
-                        key={student.id}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="p-4 rounded-xl bg-card/50 border border-border/50 hover:border-accent/30 transition-all"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-accent to-primary flex items-center justify-center">
-                            <span className="text-lg font-bold text-white">{student.name[0]}</span>
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-medium">{student.name}</h4>
-                            <p className="text-sm text-muted-foreground">{student.grade} • {student.email}</p>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm font-medium">
-                              {student.tasksCompleted}/{student.tasksAssigned} tasks
+                    {loadingStudents ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : connectedStudents.length === 0 ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>No connected students yet.</p>
+                        <p className="text-sm mt-2">Share your teacher code to get started!</p>
+                      </div>
+                    ) : (
+                      connectedStudents.map((connection: any) => (
+                        <motion.div
+                          key={connection.student._id}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="p-4 rounded-xl bg-card/50 border border-border/50 hover:border-accent/30 transition-all"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-accent to-primary flex items-center justify-center">
+                              <span className="text-lg font-bold text-white">{connection.student.name[0]}</span>
                             </div>
-                            <Progress 
-                              value={(student.tasksCompleted / student.tasksAssigned) * 100} 
-                              className="w-24 h-2 mt-1"
-                            />
+                            <div className="flex-1">
+                              <h4 className="font-medium">{connection.student.name}</h4>
+                              <p className="text-sm text-muted-foreground">{connection.student.email}</p>
+                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="p-1 rounded hover:bg-muted transition-colors">
+                                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedStudents([connection.student._id]);
+                                  setIsAssignDialogOpen(true);
+                                }}>
+                                  <Send className="w-4 h-4 mr-2" /> Assign Task
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="text-destructive">
+                                  <Trash2 className="w-4 h-4 mr-2" /> Remove
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                        </motion.div>
+                      ))
+                    )}
                   </TabsContent>
 
                   <TabsContent value="tasks" className="space-y-3">
@@ -447,31 +570,76 @@ const TeacherDashboard = () => {
               <div className="glass-card p-6 rounded-2xl glow-blue">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-                    <QrCode className="w-5 h-5 text-accent" />
+                    <Copy className="w-5 h-5 text-accent" />
                   </div>
                   <h3 className="font-heading font-semibold">Your Teacher Code</h3>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
                   Share this code with students to connect with them.
                 </p>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 px-4 py-3 rounded-xl bg-muted/50 font-mono text-2xl font-bold text-center tracking-widest">
+                <div className="flex gap-2 items-stretch mb-4">
+                  <div className="flex-1 px-4 py-3 rounded-lg bg-card/50 border border-border/50 font-mono font-bold text-lg flex items-center justify-center tracking-widest">
                     {teacherCode}
                   </div>
-                  <Button onClick={copyCode} variant="outline" size="icon" className="h-12 w-12">
-                    <Copy className="w-5 h-5" />
+                  <Button
+                    onClick={copyCode}
+                    className={`btn-gradient-blue ${copiedCode ? 'bg-success' : ''}`}
+                  >
+                    {copiedCode ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  {copiedCode ? '✓ Copied to clipboard!' : 'Click to copy'}
+                </p>
               </div>
 
               {/* Connection Requests */}
-              <div className="glass-card p-6 rounded-2xl">
-                <h3 className="font-heading font-semibold mb-4">Connection Requests</h3>
-                <div className="text-center py-8 text-muted-foreground">
-                  <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">No pending requests</p>
+              {pendingRequests.length > 0 && (
+                <div className="glass-card p-6 rounded-2xl">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-warning/20 flex items-center justify-center">
+                      <AlertCircle className="w-5 h-5 text-warning" />
+                    </div>
+                    <h3 className="font-heading font-semibold">Connection Requests</h3>
+                    <span className="ml-auto text-xs bg-warning/20 text-warning px-2 py-1 rounded-full font-semibold">
+                      {pendingRequests.length}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {pendingRequests.map((req) => (
+                      <motion.div
+                        key={req._id}
+                        layout
+                        className="p-3 bg-card/50 rounded-lg border border-border/50 hover:border-warning/30 transition-colors"
+                      >
+                        <p className="font-medium text-sm mb-2">{req.student.name}</p>
+                        <p className="text-xs text-muted-foreground mb-3">{req.student.email}</p>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleRespondToRequest(req._id, 'accept')}
+                            className="btn-gradient-blue flex-1 h-8"
+                          >
+                            <Check className="w-3 h-3 mr-1" /> Accept
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRespondToRequest(req._id, 'reject')}
+                            className="flex-1 h-8"
+                          >
+                            <X className="w-3 h-3 mr-1" /> Decline
+                          </Button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Quick Stats */}
               <div className="glass-card p-6 rounded-2xl">

@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User';
 import StudentProfile from '../models/StudentProfile';
 import TeacherProfile from '../models/TeacherProfile';
-import crypto from 'crypto';
+import { generateUniqueCode } from '../utils/codeGenerator';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || '';
@@ -26,14 +26,16 @@ router.post(
       if (existing) return res.status(409).json({ message: 'Email already in use' });
       const hashed = await bcrypt.hash(password, 10);
       const user = await User.create({ name, email, password: hashed, role });
-      // create profile
+      
+      // Create user profile
       if (role === 'student') {
         await StudentProfile.create({ userId: user._id });
       } else {
-        // generate short invite code (6 uppercase alnum)
-        const code = crypto.randomBytes(4).toString('hex').slice(0,6).toUpperCase();
+        // Generate unique teacher code
+        const code = await generateUniqueCode();
         await TeacherProfile.create({ userId: user._id, code });
       }
+      
       const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
       res.status(201).json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
     } catch (err) {

@@ -197,4 +197,27 @@ router.post(
   }
 );
 
+// Teacher can remove a connection (disconnect a student)
+router.delete('/:id', protect, roleCheck(['teacher']), async (req, res) => {
+  const user = (req as any).user;
+  const { id } = req.params;
+  try {
+    const conn = await Connection.findById(id);
+    if (!conn) return res.status(404).json({ message: 'Connection not found' });
+    if (String(conn.teacher) !== String(user._id)) {
+      return res.status(403).json({ message: 'Only the teacher can remove this connection' });
+    }
+
+    await Connection.deleteOne({ _id: id });
+    // remove from profiles
+    await TeacherProfile.updateOne({ userId: conn.teacher }, { $pull: { connectedStudents: conn.student } });
+    await StudentProfile.updateOne({ userId: conn.student }, { $pull: { connectedTeachers: conn.teacher } });
+
+    res.json({ message: 'Connection removed' });
+  } catch (err) {
+    console.error('[connections.delete] error:', err);
+    res.status(500).json({ message: 'Failed to remove connection' });
+  }
+});
+
 export default router;

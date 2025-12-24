@@ -7,6 +7,45 @@ import StudentProfile from '../models/StudentProfile';
 
 const router = express.Router();
 
+// Teacher assigns a task to multiple students
+router.post(
+  '/assign',
+  protect,
+  body('title').isString().notEmpty(),
+  body('assignedTo').isArray({ min: 1 }),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const user = (req as any).user;
+    const { title, description, dueDate, priority, assignedTo } = req.body;
+    try {
+      if (user.role !== 'teacher') return res.status(403).json({ message: 'Only teachers can assign tasks' });
+
+      const created: any[] = [];
+      for (const studentId of assignedTo) {
+        const task = await Task.create({
+          title,
+          description,
+          dueDate,
+          priority,
+          assignedBy: user._id,
+          assignedTo: studentId
+        });
+        created.push(task);
+
+        // update profiles
+        await TeacherProfile.updateOne({ userId: user._id }, { $addToSet: { assignedTasks: task._id } });
+        await StudentProfile.updateOne({ userId: studentId }, { $addToSet: { assignedTasks: task._id } });
+      }
+
+      res.status(201).json({ tasks: created });
+    } catch (err) {
+      console.error('Assign tasks error:', err);
+      res.status(500).json({ message: 'Failed to assign tasks' });
+    }
+  }
+);
+
 // Create task
 router.post(
   '/',

@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import MindMap from "@/components/MindMap";
 import { getPendingConnections, getAcceptedConnections } from "@/services/connectionsApi";
+import tasksApi from '@/services/tasksApi';
 
 interface Task {
   id: string;
@@ -189,12 +190,20 @@ const StudentDashboard = () => {
     }
   };
 
-  const toggleComplete = (id: string) => {
-    setTasks(tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)));
-    toast({
-      title: "Task updated",
-      description: "Task status has been changed.",
-    });
+  const toggleComplete = async (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    const newCompleted = !task.completed;
+    // optimistic update
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, completed: newCompleted } : t)));
+    try {
+      await tasksApi.updateTask(id, { status: newCompleted ? 'completed' : 'pending' });
+      toast({ title: 'Task updated', description: 'Task status has been changed.' });
+    } catch (err: any) {
+      // rollback on error
+      setTasks(tasks.map((t) => (t.id === id ? { ...t, completed: task.completed } : t)));
+      toast({ title: 'Error', description: err.message || 'Failed to update task', variant: 'destructive' });
+    }
   };
 
   const deleteTask = (id: string) => {
@@ -539,6 +548,15 @@ const StudentDashboard = () => {
                       if (!res.ok) { toast({ title: 'Request failed', description: data?.message || 'Failed to send request', variant: 'destructive' }); return; }
                       toast({ title: 'Request sent', description: 'Connection request sent to teacher.' });
                       setTeacherCode('');
+                      // reload connection lists so student sees the pending request they just sent
+                      try {
+                        const [pending, accepted] = await Promise.all([getPendingConnections(), getAcceptedConnections()]);
+                        setPendingConnections(pending);
+                        setAcceptedConnections(accepted);
+                      } catch (err) {
+                        // non-fatal
+                        console.error('Failed to refresh connections after request', err);
+                      }
                     } catch (err: any) {
                       toast({ title: 'Network error', description: err?.message || 'Failed to contact server', variant: 'destructive' });
                     }

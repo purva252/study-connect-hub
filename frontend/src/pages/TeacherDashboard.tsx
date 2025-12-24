@@ -206,7 +206,7 @@ const TeacherDashboard = () => {
     }
   };
 
-  const handleAssignTask = () => {
+  const handleAssignTask = async () => {
     if (!newTask.title || !newTask.subject || selectedStudents.length === 0) {
       toast({
         title: "Missing fields",
@@ -216,22 +216,37 @@ const TeacherDashboard = () => {
       return;
     }
 
-    const task: AssignedTask = {
-      id: Date.now().toString(),
-      ...newTask,
-      assignedTo: selectedStudents,
-      completions: selectedStudents.map((id) => ({ studentId: id, completed: false })),
-      createdAt: new Date().toISOString().split("T")[0],
-    };
+    try {
+      const payload = {
+        title: newTask.title,
+        description: newTask.description,
+        dueDate: newTask.dueDate || undefined,
+        priority: newTask.priority,
+        assignedTo: selectedStudents,
+      };
+      const tasksRes = await (await import('@/services/tasksApi')).assignTasks(payload);
+      const created = tasksRes.tasks || [];
+      // map created tasks into AssignedTask shape for UI
+      const mapped = created.map((t: any) => ({
+        id: t._id,
+        title: t.title,
+        subject: t.subject || newTask.subject,
+        description: t.description || newTask.description,
+        dueDate: t.dueDate ? new Date(t.dueDate).toISOString().slice(0,10) : newTask.dueDate,
+        priority: t.priority || newTask.priority,
+        assignedTo: [String(t.assignedTo)],
+        completions: [{ studentId: String(t.assignedTo), completed: false }],
+        createdAt: t.createdAt || new Date().toISOString().split('T')[0]
+      }));
 
-    setTasks([...tasks, task]);
-    setNewTask({ title: "", subject: "", description: "", dueDate: "", priority: "medium" });
-    setSelectedStudents([]);
-    setIsAssignDialogOpen(false);
-    toast({
-      title: "Task assigned!",
-      description: `Task has been assigned to ${selectedStudents.length} student(s).`,
-    });
+      setTasks([...tasks, ...mapped]);
+      setNewTask({ title: "", subject: "", description: "", dueDate: "", priority: "medium" });
+      setSelectedStudents([]);
+      setIsAssignDialogOpen(false);
+      toast({ title: 'Task assigned!', description: `Assigned to ${created.length} student(s)` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to assign tasks', variant: 'destructive' });
+    }
   };
 
   const deleteTask = (id: string) => {
@@ -493,7 +508,18 @@ const TeacherDashboard = () => {
                                 }}>
                                   <Send className="w-4 h-4 mr-2" /> Assign Task
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="text-destructive">
+                                <DropdownMenuItem className="text-destructive" onClick={async () => {
+                                  try {
+                                    const res = await (await import('@/services/connectionsApi')).removeConnection(connection._id);
+                                    toast({ title: 'Removed', description: res.message });
+                                    // refresh lists
+                                    const [accepted, pending] = await Promise.all([getAcceptedConnections(), getPendingConnections()]);
+                                    setConnectedStudents(accepted);
+                                    setPendingRequests(pending);
+                                  } catch (err: any) {
+                                    toast({ title: 'Error', description: err.message || 'Failed to remove connection', variant: 'destructive' });
+                                  }
+                                }}>
                                   <Trash2 className="w-4 h-4 mr-2" /> Remove
                                 </DropdownMenuItem>
                               </DropdownMenuContent>

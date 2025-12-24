@@ -127,3 +127,17 @@ export const respondToInvite = async (
   }
   return res.json();
 };
+
+// Teacher removes a connection
+export const removeConnection = async (connectionId: string): Promise<{ message: string }> => {
+  const token = localStorage.getItem('sc_token');
+  const res = await fetch(`${API_BASE}/connections/${connectionId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.message || 'Failed to remove connection');
+  }
+  return res.json();
+};

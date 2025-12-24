@@ -31,11 +31,17 @@ router.post(
           assignedBy: user._id,
           assignedTo: studentId
         });
-        created.push(task);
 
         // update profiles
         await TeacherProfile.updateOne({ userId: user._id }, { $addToSet: { assignedTasks: task._id } });
         await StudentProfile.updateOne({ userId: studentId }, { $addToSet: { assignedTasks: task._id } });
+
+        // populate before returning
+        const populated = await Task.findById(task._id)
+          .populate('assignedBy', 'name email')
+          .populate('assignedTo', 'name email')
+          .lean();
+        created.push(populated);
       }
 
       res.status(201).json({ tasks: created });
@@ -104,7 +110,13 @@ router.get('/', protect, async (req, res) => {
     if (user.role === 'teacher') filter.assignedBy = user._id;
     else filter.assignedTo = user._id;
     const total = await Task.countDocuments(filter);
-    const tasks = await Task.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean();
+    const tasks = await Task.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('assignedBy', 'name email')
+      .populate('assignedTo', 'name email')
+      .lean();
     res.json({ page, limit, total, tasks });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch tasks' });

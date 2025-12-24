@@ -98,17 +98,22 @@ const StudentDashboard = () => {
         if (!res.ok) return;
         const data = await res.json();
         // map backend tasks to UI Task shape
-        const mapped = (data.tasks || data).map((t: any) => ({
-          id: t._id,
-          title: t.title,
-          subject: t.subject || '',
-          description: t.description || '',
-          dueDate: t.dueDate ? new Date(t.dueDate).toISOString().slice(0,10) : '',
-          priority: t.priority || 'medium',
-          completed: t.status === 'completed',
-          type: String(t.assignedBy) === String(t.assignedTo) ? 'personal' : (t.assignedBy && t.assignedBy === t.assignedTo ? 'personal' : (t.assignedBy ? 'assigned' : 'personal')),
-          teacherName: t.assignedByName || undefined,
-        }));
+        const mapped = (data.tasks || data).map((t: any) => {
+          const assignedById = t.assignedBy && (t.assignedBy._id || t.assignedBy);
+          const assignedToId = t.assignedTo && (t.assignedTo._id || t.assignedTo);
+          const isAssignedByTeacher = Boolean(assignedById && assignedToId && String(assignedById) !== String(assignedToId));
+          return {
+            id: t._id,
+            title: t.title,
+            subject: t.subject || '',
+            description: t.description || '',
+            dueDate: t.dueDate ? new Date(t.dueDate).toISOString().slice(0,10) : '',
+            priority: t.priority || 'medium',
+            completed: t.status === 'completed',
+            type: isAssignedByTeacher ? 'assigned' : 'personal',
+            teacherName: t.assignedBy && (t.assignedBy.name || t.assignedByName) ? (t.assignedBy.name || t.assignedByName) : undefined,
+          };
+        });
         setTasks(mapped);
       } catch (err) {
         // silent

@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
 import { getAcceptedConnections, getPendingConnections, respondToInvite } from "@/services/connectionsApi";
+import tasksApi from '@/services/tasksApi';
 
 interface Student {
   id: string;
@@ -47,37 +48,7 @@ const initialStudents: Student[] = [
   { id: "3", name: "Carol Davis", grade: "11th", email: "carol@school.edu", tasksAssigned: 4, tasksCompleted: 2, connectedAt: "2024-12-10" },
 ];
 
-const initialTasks: AssignedTask[] = [
-  {
-    id: "1",
-    title: "Physics Lab Report",
-    subject: "Physics",
-    description: "Complete the pendulum experiment report",
-    dueDate: "2025-01-08",
-    priority: "high",
-    assignedTo: ["1", "2", "3"],
-    completions: [
-      { studentId: "1", completed: true },
-      { studentId: "2", completed: true },
-      { studentId: "3", completed: false },
-    ],
-    createdAt: "2024-12-20",
-  },
-  {
-    id: "2",
-    title: "Chapter Review Questions",
-    subject: "Physics",
-    description: "Answer questions from Chapter 10",
-    dueDate: "2025-01-15",
-    priority: "medium",
-    assignedTo: ["1", "2"],
-    completions: [
-      { studentId: "1", completed: false },
-      { studentId: "2", completed: true },
-    ],
-    createdAt: "2024-12-22",
-  },
-];
+const initialTasks: AssignedTask[] = [];
 
 const TeacherDashboard = () => {
   const [connectedStudents, setConnectedStudents] = useState<any[]>([]);
@@ -86,6 +57,9 @@ const TeacherDashboard = () => {
   const [tasks, setTasks] = useState<AssignedTask[]>(initialTasks);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  const [selectedGroupStudents, setSelectedGroupStudents] = useState<any[]>([]);
+  const [selectedGroupTitle, setSelectedGroupTitle] = useState("");
   const [newTask, setNewTask] = useState({
     title: "",
     subject: "",
@@ -154,7 +128,31 @@ const TeacherDashboard = () => {
 
     loadTeacherInfo();
     loadStudents();
+    // load teacher tasks
+    loadTasks();
   }, [toast]);
+
+  // load tasks for teacher
+  async function loadTasks() {
+    try {
+      const res = await tasksApi.getTasks();
+      const backendTasks = res.tasks || [];
+      const mapped = backendTasks.map((t: any) => ({
+        id: t._id,
+        title: t.title,
+        subject: t.subject || '',
+        description: t.description || '',
+        dueDate: t.dueDate ? new Date(t.dueDate).toISOString().slice(0,10) : '',
+        priority: t.priority || 'medium',
+        assignedTo: [String(t.assignedTo && (t.assignedTo._id || t.assignedTo))],
+        completions: [{ studentId: String(t.assignedTo && (t.assignedTo._id || t.assignedTo)), completed: t.status === 'completed' }],
+        createdAt: t.createdAt || ''
+      }));
+      setTasks(mapped);
+    } catch (err) {
+      console.error('Failed to load tasks:', err);
+    }
+  };
 
   const stats = {
     totalStudents: connectedStudents.length,
@@ -225,36 +223,47 @@ const TeacherDashboard = () => {
         assignedTo: selectedStudents,
       };
       const tasksRes = await (await import('@/services/tasksApi')).assignTasks(payload);
-      const created = tasksRes.tasks || [];
-      // map created tasks into AssignedTask shape for UI
-      const mapped = created.map((t: any) => ({
-        id: t._id,
-        title: t.title,
-        subject: t.subject || newTask.subject,
-        description: t.description || newTask.description,
-        dueDate: t.dueDate ? new Date(t.dueDate).toISOString().slice(0,10) : newTask.dueDate,
-        priority: t.priority || newTask.priority,
-        assignedTo: [String(t.assignedTo)],
-        completions: [{ studentId: String(t.assignedTo), completed: false }],
-        createdAt: t.createdAt || new Date().toISOString().split('T')[0]
-      }));
-
-      setTasks([...tasks, ...mapped]);
+      // refresh teacher tasks from backend
+      const assignedCount = (tasksRes && tasksRes.tasks) ? tasksRes.tasks.length : selectedStudents.length;
+      await loadTasks();
       setNewTask({ title: "", subject: "", description: "", dueDate: "", priority: "medium" });
       setSelectedStudents([]);
       setIsAssignDialogOpen(false);
-      toast({ title: 'Task assigned!', description: `Assigned to ${created.length} student(s)` });
+      toast({ title: 'Task assigned!', description: `Assigned to ${assignedCount} student(s)` });
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to assign tasks', variant: 'destructive' });
     }
   };
 
-  const deleteTask = (id: string) => {
-    setTasks(tasks.filter((t) => t.id !== id));
-    toast({
-      title: "Task deleted",
-      description: "The task has been removed.",
-    });
+  const deleteTask = async (identifier: string) => {
+    try {
+      // if identifier matches a task id, delete single; otherwise treat as title and delete all matching
+      const isId = tasks.some((t) => t.id === identifier);
+      if (isId) {
+        // call backend delete if possible
+        try {
+          const token = localStorage.getItem('sc_token');
+          await fetch(`/api/tasks/${identifier}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        } catch (_) {}
+        setTasks(tasks.filter((t) => t.id !== identifier));
+        toast({ title: 'Task deleted', description: 'The task has been removed.' });
+        return;
+      }
+
+      // treat as title
+      const title = identifier;
+      const toDelete = tasks.filter((t) => t.title === title).map((t) => t.id);
+      for (const id of toDelete) {
+        try {
+          const token = localStorage.getItem('sc_token');
+          await fetch(`/api/tasks/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        } catch (_) {}
+      }
+      setTasks(tasks.filter((t) => t.title !== title));
+      toast({ title: 'Tasks deleted', description: `Removed ${toDelete.length} task(s).` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to delete task(s)', variant: 'destructive' });
+    }
   };
 
   const toggleStudentSelection = (id: string) => {
@@ -531,12 +540,61 @@ const TeacherDashboard = () => {
                   </TabsContent>
 
                   <TabsContent value="tasks" className="space-y-3">
-                    {tasks.map((task) => {
-                      const completedCount = task.completions.filter((c) => c.completed).length;
-                      const totalAssigned = task.assignedTo.length;
-                      return (
+                    {(() => {
+                      // Group tasks by title
+                      const groupsMap: Record<string, any> = {};
+                      tasks.forEach((t) => {
+                        const key = t.title || t.id;
+                        if (!groupsMap[key]) {
+                          groupsMap[key] = { title: t.title, subject: t.subject, dueDate: t.dueDate, priority: t.priority, items: [] };
+                        }
+                        groupsMap[key].items.push(t);
+                      });
+
+                      const groups = Object.values(groupsMap).map((g: any) => {
+                        // aggregate students and completion status per group
+                        const studentsById: Record<string, any> = {};
+                        g.items.forEach((it: any) => {
+                          (it.assignedTo || []).forEach((sid: string, idx: number) => {
+                            const id = String(sid);
+                            const completedFlag = it.completions && it.completions[idx] ? !!it.completions[idx].completed : false;
+                            if (!studentsById[id]) {
+                              const conn = connectedStudents.find((c) => String(c.student._id) === id || String(c.student._id) === String(sid));
+                              studentsById[id] = {
+                                id,
+                                name: conn?.student?.name || `Student ${id}`,
+                                email: conn?.student?.email || "",
+                                completed: completedFlag,
+                              };
+                            } else {
+                              studentsById[id].completed = studentsById[id].completed || completedFlag;
+                            }
+                          });
+                        });
+
+                        const studentsArr = Object.values(studentsById);
+                        return {
+                          title: g.title,
+                          subject: g.subject,
+                          dueDate: g.dueDate,
+                          priority: g.priority,
+                          totalAssigned: studentsArr.length,
+                          completedCount: studentsArr.filter((s: any) => s.completed).length,
+                          students: studentsArr,
+                        };
+                      });
+
+                      if (groups.length === 0) {
+                        return (
+                          <div className="text-center py-12 text-muted-foreground">
+                            <p>No assigned tasks yet.</p>
+                          </div>
+                        );
+                      }
+
+                      return groups.map((group: any) => (
                         <motion.div
-                          key={task.id}
+                          key={group.title}
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
                           className="p-4 rounded-xl bg-card/50 border border-border/50 hover:border-primary/30 transition-all"
@@ -545,44 +603,98 @@ const TeacherDashboard = () => {
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent">
-                                  {task.subject}
+                                  {group.subject}
                                 </span>
-                                <span className={`text-xs px-2 py-0.5 rounded-full border ${getPriorityColor(task.priority)}`}>
-                                  {task.priority}
+                                <span className={`text-xs px-2 py-0.5 rounded-full border ${getPriorityColor(group.priority)}`}>
+                                  {group.priority}
                                 </span>
                               </div>
-                              <h4 className="font-medium">{task.title}</h4>
-                              <p className="text-sm text-muted-foreground line-clamp-1">{task.description}</p>
+                              <h4 className="font-medium">{group.title}</h4>
+                              <p className="text-sm text-muted-foreground line-clamp-1">Due: {group.dueDate}</p>
                               <div className="flex items-center gap-4 mt-2">
-                                <span className="text-xs text-muted-foreground">Due: {task.dueDate}</span>
                                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                                   <Users className="w-3 h-3" />
-                                  {completedCount}/{totalAssigned} completed
+                                  Assigned to: {group.totalAssigned}
+                                </span>
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Check className="w-3 h-3" />
+                                  Completed: {group.completedCount} / {group.totalAssigned}
                                 </span>
                               </div>
                             </div>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button className="p-1 rounded hover:bg-muted transition-colors">
-                                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem>
-                                  <Edit2 className="w-4 h-4 mr-2" /> Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => deleteTask(task.id)} className="text-destructive">
-                                  <Trash2 className="w-4 h-4 mr-2" /> Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+
+                            <div className="flex flex-col gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setSelectedGroupStudents(group.students);
+                                  setSelectedGroupTitle(group.title);
+                                  setGroupDialogOpen(true);
+                                }}
+                              >
+                                View Students &nbsp; ▶
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button className="p-1 rounded hover:bg-muted transition-colors">
+                                    <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem>
+                                    <Edit2 className="w-4 h-4 mr-2" /> Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => deleteTask(group.title)} className="text-destructive">
+                                    <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           </div>
                         </motion.div>
-                      );
-                    })}
+                      ));
+                    })()}
                   </TabsContent>
                 </Tabs>
               </div>
+
+              {/* Group students dialog */}
+              <Dialog open={groupDialogOpen} onOpenChange={setGroupDialogOpen}>
+                <DialogContent className="glass-card border-border/50 max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Students for: {selectedGroupTitle}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 mt-2">
+                    {selectedGroupStudents.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No students found for this assignment.</p>
+                    ) : (
+                      selectedGroupStudents.map((s) => (
+                        <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg border border-border/50">
+                          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                            <span className="font-medium">{s.name?.[0] || "S"}</span>
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium">{s.name}</div>
+                            <div className="text-xs text-muted-foreground">{s.email}</div>
+                          </div>
+                          <div className="text-sm">
+                            {s.completed ? (
+                              <span className="text-success font-medium">Completed</span>
+                            ) : (
+                              <span className="text-muted-foreground">Pending</span>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    <div className="text-right">
+                      <Button onClick={() => setGroupDialogOpen(false)}>Close</Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
             </motion.div>
 
             {/* Right Column - Teacher Code & Quick Actions */}

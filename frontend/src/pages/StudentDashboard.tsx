@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { 
   ClipboardList, CheckCircle2, Clock, TrendingUp, Plus, 
   Calendar, Brain, Gamepad2, Link2, Bell, User, LogOut,
-  MoreVertical, Trash2, Edit2, GraduationCap, Users
+  MoreVertical, Trash2, Edit2, GraduationCap, Users, X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
+import MindMap from "@/components/MindMap";
 
 interface Task {
   id: string;
@@ -66,6 +67,7 @@ const initialTasks: Task[] = [
 const StudentDashboard = () => {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [showMindMap, setShowMindMap] = useState(false);
   const [newTask, setNewTask] = useState({
     title: "",
     subject: "",
@@ -452,7 +454,7 @@ const StudentDashboard = () => {
               <div className="glass-card p-6 rounded-2xl">
                 <h3 className="font-heading font-semibold mb-4">Study Tools</h3>
                 <div className="space-y-3">
-                  <button className="w-full flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-left">
+                  <button onClick={() => setShowMindMap(true)} className="w-full flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-left">
                     <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
                       <Brain className="w-5 h-5 text-primary" />
                     </div>
@@ -485,6 +487,26 @@ const StudentDashboard = () => {
           </div>
         </div>
       </main>
+
+      {/* Mind Map Modal */}
+      {showMindMap && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl border border-border/50">
+            <div className="flex items-center justify-between p-6 border-b border-border/50">
+              <h2 className="text-2xl font-bold flex items-center gap-3">
+                <Brain className="w-6 h-6 text-primary" />
+                Visual Mind Map
+              </h2>
+              <button onClick={() => setShowMindMap(false)} className="p-2 hover:bg-muted rounded-lg transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-auto h-[calc(90vh-100px)]">
+              <MindMap />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

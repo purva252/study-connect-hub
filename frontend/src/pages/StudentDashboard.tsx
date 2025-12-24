@@ -17,7 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import MindMap from "@/components/MindMap";
-import { getPendingConnections, getAcceptedConnections } from "@/services/connectionsApi";
+import { getPendingConnections, getAcceptedConnections, respondToTeacherInvite } from "@/services/connectionsApi";
 import tasksApi from '@/services/tasksApi';
 
 interface Task {
@@ -86,6 +86,7 @@ const StudentDashboard = () => {
   const [pendingConnections, setPendingConnections] = useState<any[]>([]);
   const [acceptedConnections, setAcceptedConnections] = useState<any[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
+  const [respondingToConnection, setRespondingToConnection] = useState<Set<string>>(new Set());
 
   // Handler for Zombie Game navigation
   const handleZombieGameClick = () => {
@@ -149,6 +150,38 @@ const StudentDashboard = () => {
     
     loadConnections();
   }, []);
+
+  // Handle teacher invite response
+  const handleRespondToInvite = async (connectionId: string, action: 'accept' | 'reject') => {
+    setRespondingToConnection(prev => new Set(prev).add(connectionId));
+    try {
+      await respondToTeacherInvite(connectionId, action);
+      toast({
+        title: action === 'accept' ? 'Accepted!' : 'Declined',
+        description: action === 'accept' ? 'You are now connected with this teacher.' : 'Connection invite declined.'
+      });
+      
+      // Reload connections
+      const [pending, accepted] = await Promise.all([
+        getPendingConnections(),
+        getAcceptedConnections()
+      ]);
+      setPendingConnections(pending);
+      setAcceptedConnections(accepted);
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to respond to invite',
+        variant: 'destructive'
+      });
+    } finally {
+      setRespondingToConnection(prev => {
+        const next = new Set(prev);
+        next.delete(connectionId);
+        return next;
+      });
+    }
+  };
 
   const stats = {
     total: tasks.length,
@@ -478,20 +511,45 @@ const StudentDashboard = () => {
                     </span>
                   </div>
                   <div className="space-y-2">
-                    {pendingConnections.map((conn) => (
-                      <motion.div
-                        key={conn._id}
-                        layout
-                        className="p-3 bg-card/50 rounded-lg border border-border/50 hover:border-warning/30 transition-colors"
-                      >
-                        <p className="font-medium text-sm mb-1">{conn.teacher.name}</p>
-                        <p className="text-xs text-muted-foreground mb-2">{conn.teacher.email}</p>
-                        <p className="text-xs text-warning flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          Waiting for teacher to accept...
-                        </p>
-                      </motion.div>
-                    ))}
+                    {pendingConnections.map((conn) => {
+                      const isResponding = respondingToConnection.has(conn._id);
+                      const teacherInitiated = conn.initiatedBy === 'teacher';
+                      return (
+                        <motion.div
+                          key={conn._id}
+                          layout
+                          className="p-3 bg-card/50 rounded-lg border border-border/50 hover:border-warning/30 transition-colors"
+                        >
+                          <p className="font-medium text-sm mb-1">{conn.teacher.name}</p>
+                          <p className="text-xs text-muted-foreground mb-3">{conn.teacher.email}</p>
+                          {teacherInitiated ? (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => handleRespondToInvite(conn._id, 'accept')}
+                                disabled={isResponding}
+                                className="flex-1 bg-success hover:bg-success/90 text-white"
+                              >
+                                {isResponding ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Check className="w-3 h-3 mr-1" /> Accept</>}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRespondToInvite(conn._id, 'reject')}
+                                disabled={isResponding}
+                                className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+                              >
+                                {isResponding ? <Loader2 className="w-3 h-3 animate-spin" /> : <><X className="w-3 h-3 mr-1" /> Decline</>}
+                              </Button>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-warning flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> Waiting for teacher to accept...
+                            </p>
+                          )}
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

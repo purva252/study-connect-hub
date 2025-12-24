@@ -221,6 +221,9 @@ const TeacherDashboard = () => {
     subjects: new Set(tasks.map(t => t.subject)).size,
   };
 
+  // For teacher UI: actionable requests are those initiated by students (teacher must respond).
+  const actionableRequests = pendingRequests.filter((r) => !r.initiatedBy || r.initiatedBy === 'student');
+
   const copyCode = async () => {
     try {
       await navigator.clipboard.writeText(teacherCode);
@@ -902,11 +905,11 @@ const TeacherDashboard = () => {
                     </div>
                     <h3 className="font-heading font-semibold">Connection Requests</h3>
                     <span className="ml-auto text-xs bg-warning/20 text-warning px-2 py-1 rounded-full font-semibold">
-                      {pendingRequests.length}
+                      {actionableRequests.length}
                     </span>
                   </div>
                   <div className="space-y-2">
-                    {pendingRequests.map((req) => (
+                    {actionableRequests.map((req) => (
                       <motion.div
                         key={req._id}
                         layout

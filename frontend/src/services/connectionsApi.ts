@@ -180,3 +180,24 @@ export const getAllStudents = async (search?: string, page: number = 1, limit: n
   }
   return res.json();
 };
+
+// Student responds to teacher invite
+export const respondToTeacherInvite = async (
+  connectionId: string,
+  action: 'accept' | 'reject'
+): Promise<Connection> => {
+  const token = localStorage.getItem('sc_token');
+  const res = await fetch(`${API_BASE}/connections/student-respond/${connectionId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ action })
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.message || 'Failed to respond to teacher invite');
+  }
+  return res.json();
+};
